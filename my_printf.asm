@@ -56,9 +56,8 @@ _myPrintf:
                 inc rsi                ; rsi++; next symbol
                 mov r9, [rsi]
                 and r9, 0xff           ; r9 = one symbol
-                sub r9, '%'
                 shl r9, 3              ; r9 *= 8
-                jmp myPrintfSpecPer[r9] 
+                jmp myPrintfSpec[r9] 
 
 
 
@@ -109,7 +108,7 @@ _myPrintf:
 
 section .rodata
 
-formatStr       db "%x = hello, world", 0x0a, 0x00
+formatStr       db "% = hello, world", 0x0a, 0x00
 
 Digits          db '0123456789abcdef'
 PercentSymb     db '%'
