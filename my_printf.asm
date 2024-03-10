@@ -2,7 +2,7 @@ section .text
 
 global _start
 
-_start:         push qword 0
+_start:         push qword 0x1234
                 push formatStr
                 call _myPrintf   ; printf(formatStr);
 
@@ -17,7 +17,7 @@ _start:         push qword 0
 ; but with few limitations. 
 ; Parameters are passed through stack
 ;
-; Supported specifiers: .....
+; Supported specifiers: %h - for hex
 ;
 ;=================================================
 
@@ -30,13 +30,19 @@ _myPrintf:      push rbp
                 mov rsi, [rbp+16]      ; formatStr
                 mov rdx, 1             ; 1 character at a time
 
+                mov r10, rbp
+                add r10, 24            ; r10 = ptr to params in stack
+
 
             myPrintfNextSymbol:
                 cmp byte [rsi], 0      
                 je myPrintfEnd         ; if (curSymbol == '\0) return
 
+                cmp byte [rsi], '%'
+                je myPrintfParamOut
+
                 syscall                ; write64(stdout, &curSymbol, 1)
-                inc rsi                ; i++
+                inc rsi                ; rsi++; next symbol
                 jmp myPrintfNextSymbol
 
 
@@ -45,8 +51,50 @@ _myPrintf:      push rbp
                 ret
 
 
+        myPrintfParamOut:
+                inc rsi                 ; rsi++; next symbol
+                mov r9, [rsi]
+                and r9, 0xff            ; r9 = one symbol
+                sub r9, 'a'
+                shl r9, 2              ; r9 *= 4
+                jmp myPrintfSpec[r9]
+
+
+
+
+
+    printHexQword:
+                mov cl, 60d           ; 60d bits = 15 hex digits to shift        
+
+            wrWNextByte:
+                mov r8, [r10]          ; r8 = qword
+                shr r8, cl             ; SI /= 16^(CX/4)
+                and r8, 0x0f           ; SI = digit value
+
+                push rcx 
+                push rsi
+                mov rsi, HexDigits
+                add rsi, r8            ; rsi = ptr to needed digit
+                syscall                ; write(curDigit)
+                pop rsi 
+                pop rcx
+                
+                sub cl, 4              ; CL -= 4
+                jns wrWNextByte        ; if (CL >= 0) repeat
+                
+
+                inc rsi                ; next symbol
+                inc r10                ; next param
+                jmp myPrintfNextSymbol
 
 
 section .data
 
-formatStr db "hello, world", 0x0a, 0x00
+formatStr       db "%h = hello, world", 0x0a, 0x00
+
+HexDigits       db '0123456789abcdef'
+
+;myPrintfSpecPerc dq 0
+
+myPrintfSpec    dd 7 dup(0), printHexQword 
+; '%h' - hex
