@@ -22,7 +22,8 @@ _start:         push qword 0x1234
 ;=================================================
 
 
-_myPrintf:      push rbp
+_myPrintf:      
+                push rbp
                 mov rbp, rsp
 
                 mov rax, 0x01          ; write64
@@ -52,35 +53,52 @@ _myPrintf:      push rbp
 
 
         myPrintfParamOut:
-                inc rsi                 ; rsi++; next symbol
+                inc rsi                ; rsi++; next symbol
                 mov r9, [rsi]
-                and r9, 0xff            ; r9 = one symbol
-                sub r9, 'a'
-                shl r9, 2              ; r9 *= 4
-                jmp myPrintfSpec[r9]
+                and r9, 0xff           ; r9 = one symbol
+                sub r9, '%'
+                shl r9, 3              ; r9 *= 8
+                jmp myPrintfSpecPer[r9] 
+
+
+
+
+    myPrintfDefault:
+                dec rsi                ; go back 1 symbol
+                jmp myPrintfPerPer     ; write % as a symbol
+
+
+    myPrintfPerPer:
+                push rsi
+                mov rsi, PercentSymb
+                syscall                ; write64(stdout, &"%", 1); => putc(stdout, '%);
+                pop rsi
+
+                inc rsi
+                jmp myPrintfNextSymbol
 
 
 
 
 
-    printHexQword:
-                mov cl, 60d           ; 60d bits = 15 hex digits to shift        
+    myPrintfPerX:
+                mov cl, 60d            ; 60d bits = 15 hex digits to shift        
 
-            wrWNextByte:
+            wrXNextByte:
                 mov r8, [r10]          ; r8 = qword
                 shr r8, cl             ; SI /= 16^(CX/4)
                 and r8, 0x0f           ; SI = digit value
 
                 push rcx 
                 push rsi
-                mov rsi, HexDigits
+                mov rsi, Digits
                 add rsi, r8            ; rsi = ptr to needed digit
                 syscall                ; write(curDigit)
                 pop rsi 
                 pop rcx
                 
-                sub cl, 4              ; CL -= 4
-                jns wrWNextByte        ; if (CL >= 0) repeat
+                sub cl, 4              ; CL -= 4 
+                jns wrXNextByte        ; if (CL >= 0) repeat
                 
 
                 inc rsi                ; next symbol
@@ -88,13 +106,21 @@ _myPrintf:      push rbp
                 jmp myPrintfNextSymbol
 
 
-section .data
 
-formatStr       db "%h = hello, world", 0x0a, 0x00
+section .rodata
 
-HexDigits       db '0123456789abcdef'
+formatStr       db "%x = hello, world", 0x0a, 0x00
 
-;myPrintfSpecPerc dq 0
+Digits          db '0123456789abcdef'
+PercentSymb     db '%'
 
-myPrintfSpec    dd 7 dup(0), printHexQword 
-; '%h' - hex
+
+;=============== printf specifiers jmp table =======================
+
+myPrintfSpec    dq 37 dup(myPrintfDefault)
+myPrintfSpecPer dq myPrintfPerPer, 59 dup(myPrintfDefault)
+; '%%' - symbol '%'
+myPrintfSpecA   dq 23 dup(myPrintfDefault), myPrintfPerX 
+; '%x' - hex
+
+;====================================================================
