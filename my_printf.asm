@@ -76,39 +76,76 @@ _myPrintf:
                 inc rsi
                 jmp myPrintfNextSymbol
 
-
-
-
-
     myPrintfPerX:
-                mov cl, 60d            ; 60d bits = 15 hex digits to shift        
-
-            wrXNextByte:
-                mov r8, [r10]          ; r8 = qword
-                shr r8, cl             ; SI /= 16^(CX/4)
-                and r8, 0x0f           ; SI = digit value
-
-                push rcx 
+                mov rdi, [r10]         ; rdi = num to write
+                add r10, 8             ; nextParam;
                 push rsi
-                mov rsi, Digits
-                add rsi, r8            ; rsi = ptr to needed digit
-                syscall                ; write(curDigit)
-                pop rsi 
-                pop rcx
-                
-                sub cl, 4              ; CL -= 4 
-                jns wrXNextByte        ; if (CL >= 0) repeat
-                
+                mov rsi, 0x0f          ; mask for last digit
+                mov rdx, 4             ; bits of 1 digit
+                call printNumBasePow2
+                jmp myPrintfPerPow2End ; same instr for all pow2-based specifiers
 
-                inc rsi                ; next symbol
-                inc r10                ; next param
+
+    myPrintfPerPow2End:
+                pop rsi
+                inc rsi                ; nextSymbol
+                mov rax, 1             ; write64()
+                mov rdx, 1             ; rdx = 1 (for writing one byte in syscall write)
                 jmp myPrintfNextSymbol
 
 
 
+;======================= printNumBasePow2 ===========================
+; Prints a number in a pow2-system (bin, oct, hex)
+; 
+; Param:  rdi = number to print
+;         rsi = bit mask to get the lowest digit (depends on base)
+;         rdx = amount of bits to shift (amount of 1 bits in rsi)
+;
+; Exit:   None
+;
+; Destr:  rax, rdi, rsi, rdx, r8, r9, cl
+;=====================================================================
+
+printNumBasePow2:
+                mov r8, NumBufEnd          ; r8 = ptr to the right of buf
+                mov cl, dl                 ; cl = amount of bits to shift
+
+
+            printNBP2NextDigit:            ; do {} while (num != 0);
+                dec r8                     ; NumBuf--;
+                mov r9, rdi                ; r9 = curNum
+                and r9, rsi                ; r9 = curDigit value
+                mov r9, Digits[r9]         ; r9 = curDigit symbol
+                mov byte [r8], r9b         ; write curDigit in mem (NumBuf)
+
+                shr rdi, cl                ; rdi /= base
+                jne printNBP2NextDigit     ; if (number == 0) break;
+
+
+            printNBP2Write:
+                mov rax, 0x01              ; write64()
+                mov rdi, 1                 ; fd  = stdout
+                mov rsi, r8                ; buf = NumBuf (from last written digit)
+                mov rdx, NumBufEnd         
+                sub rdx, r8                ; rdx = amount of digits
+                syscall                    ; write64(stdout, NumBuf, len(num));
+
+                ret
+
+
+
+section .data
+
+NumBuf          db 0 dup (64)
+NumBufEnd       db 0
+NumBufLen       equ NumBufLen - NumBuf
+                
+
+
 section .rodata
 
-formatStr       db "% = hello, world", 0x0a, 0x00
+formatStr       db "%x = hello, world", 0x0a, 0x00
 
 Digits          db '0123456789abcdef'
 PercentSymb     db '%'
