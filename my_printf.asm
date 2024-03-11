@@ -2,11 +2,21 @@ section .text
 
 global _start
 
-_start:         push qword 0x1234
-                push qword 0x1111
-                push qword 0x2222
-                push formatStr
+_start:         
+                push rbp
+                mov rbp, rsp
+
+                sub rsp, 40
+                mov qword [rbp-40], formatStr 
+                mov qword [rbp-32], 0x2222
+                mov qword [rbp-24], 0x1111
+                mov qword [rbp-16], 0x1234
+                mov byte  [rbp-8],  'x'
+
                 call _myPrintf   ; printf(formatStr);
+
+                add rsp, 40
+                pop rbp
 
                 mov rax, 0x3c    ; exit
                 xor rdi, rdi     ; exit code = 0
@@ -70,7 +80,6 @@ _myPrintf:
                 dec rsi                ; go back 1 symbol
                 jmp myPrintfPerPer     ; write % as a symbol
 
-
     myPrintfPerPer:
                 push rsi
                 mov rsi, PercentSymb
@@ -104,7 +113,18 @@ _myPrintf:
                 call printNumBasePow2
                 jmp myPrintfPerPow2End ; same instr for all pow2-based specifiers
 
-    
+    myPrintfPerC:
+                push rsi
+                mov rsi, r10           ; rsi = ptr to char to write
+                syscall                ; write(stdout, &symbol, 1)
+
+                add r10, 8             ; next param
+                pop rsi
+                inc rsi
+                jmp myPrintfNextSymbol
+
+
+
 
 
     myPrintfPerPow2End:
@@ -167,7 +187,7 @@ NumBufLen       equ NumBufLen - NumBuf
 
 section .rodata
 
-formatStr       db "%x %o %b = hello, world", 0x0a, 0x00
+formatStr       db "%x %o %b %c = hello, world", 0x0a, 0x00
 
 Digits          db '0123456789abcdef'
 PercentSymb     db '%'
@@ -179,7 +199,7 @@ myPrintfSpec    dq '%' dup(myPrintfDefault)                          ; start
 myPrintfSpecPer dq myPrintfPerPer,  ('a'-'%'-1) dup(myPrintfDefault) ; %% - symbol '%'
 myPrintfSpecA   dq myPrintfDefault                                   ; start of digits
 myPrintfSpecB   dq myPrintfPerB                                      ; %b - bin
-myPrintfSpecC   dq myPrintfDefault                                   ; %c
+myPrintfSpecC   dq myPrintfPerC                                      ; %c - char
 myPrintfSpecD   dq myPrintfDefault, ('o'-'d'-1) dup(myPrintfDefault) ; %d
 myPrintfSpecO   dq myPrintfPerO,    ('x'-'o'-1) dup(myPrintfDefault) ; %o - oct
 myPrintfSpecX   dq myPrintfPerX,    (256-'x'-1) dup(myPrintfDefault) ; %x - hex

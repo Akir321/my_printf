@@ -11,4 +11,5 @@ Later will be created a function that supports stdcall to make it possible to ca
 # Supported specifiers
     * %x - hex
     * %o - oct
-    * %b - bink
+    * %b - bin
+    * %c - char
