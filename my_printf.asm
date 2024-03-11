@@ -3,6 +3,8 @@ section .text
 global _start
 
 _start:         push qword 0x1234
+                push qword 0x1111
+                push qword 0x2222
                 push formatStr
                 call _myPrintf   ; printf(formatStr);
 
@@ -17,7 +19,9 @@ _start:         push qword 0x1234
 ; but with few limitations. 
 ; Parameters are passed through stack
 ;
-; Supported specifiers: %h - for hex
+; Supported specifiers: %x - hex
+;                       %o - oct
+;                       %b - bin
 ;
 ;=================================================
 
@@ -78,17 +82,35 @@ _myPrintf:
 
     myPrintfPerX:
                 mov rdi, [r10]         ; rdi = num to write
-                add r10, 8             ; nextParam;
                 push rsi
-                mov rsi, 0x0f          ; mask for last digit
+                mov rsi, 0x0f          ; mask for last digit (0b1111)
                 mov rdx, 4             ; bits of 1 digit
                 call printNumBasePow2
                 jmp myPrintfPerPow2End ; same instr for all pow2-based specifiers
+
+    myPrintfPerO:
+                mov rdi, [r10]         ; rdi = num to write
+                push rsi
+                mov rsi, 0x07          ; mask for last digit (0b0111)
+                mov rdx, 3             ; bits of 1 digit
+                call printNumBasePow2
+                jmp myPrintfPerPow2End ; same instr for all pow2-based specifiers
+
+    myPrintfPerB:
+                mov rdi, [r10]         ; rdi = num to write
+                push rsi
+                mov rsi, 0x01          ; mask for last digit (0b0001)
+                mov rdx, 1             ; bits of 1 digit
+                call printNumBasePow2
+                jmp myPrintfPerPow2End ; same instr for all pow2-based specifiers
+
+    
 
 
     myPrintfPerPow2End:
                 pop rsi
                 inc rsi                ; nextSymbol
+                add r10, 8             ; nextParam;
                 mov rax, 1             ; write64()
                 mov rdx, 1             ; rdx = 1 (for writing one byte in syscall write)
                 jmp myPrintfNextSymbol
@@ -145,18 +167,21 @@ NumBufLen       equ NumBufLen - NumBuf
 
 section .rodata
 
-formatStr       db "%x = hello, world", 0x0a, 0x00
+formatStr       db "%x %o %b = hello, world", 0x0a, 0x00
 
 Digits          db '0123456789abcdef'
 PercentSymb     db '%'
 
 
-;=============== printf specifiers jmp table =======================
+;=========================== printf specifiers jmp table =============================
 
-myPrintfSpec    dq 37 dup(myPrintfDefault)
-myPrintfSpecPer dq myPrintfPerPer, 59 dup(myPrintfDefault)
-; '%%' - symbol '%'
-myPrintfSpecA   dq 23 dup(myPrintfDefault), myPrintfPerX 
-; '%x' - hex
+myPrintfSpec    dq '%' dup(myPrintfDefault)                          ; start
+myPrintfSpecPer dq myPrintfPerPer,  ('a'-'%'-1) dup(myPrintfDefault) ; %% - symbol '%'
+myPrintfSpecA   dq myPrintfDefault                                   ; start of digits
+myPrintfSpecB   dq myPrintfPerB                                      ; %b - bin
+myPrintfSpecC   dq myPrintfDefault                                   ; %c
+myPrintfSpecD   dq myPrintfDefault, ('o'-'d'-1) dup(myPrintfDefault) ; %d
+myPrintfSpecO   dq myPrintfPerO,    ('x'-'o'-1) dup(myPrintfDefault) ; %o - oct
+myPrintfSpecX   dq myPrintfPerX,    (256-'x'-1) dup(myPrintfDefault) ; %x - hex
 
-;====================================================================
+;======================================================================================
