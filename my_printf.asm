@@ -15,7 +15,7 @@ _start:
                 mov r9, -89
 
                 push 12
-                push 98
+                push msg
 
                 call myPrintf
 
@@ -176,6 +176,31 @@ _myPrintf:
                 inc rsi
                 jmp myPrintfNextSymbol
 
+    myPrintfPerS:
+                push rsi
+                mov rsi, [r10]         ; rsi = str to print
+
+                cld                    ; df = 0; move forward
+                mov rdi, rsi           ; rdi = begin of str
+                xor cx, cx
+                dec cx                 ; cx = 0xffff
+                mov al, 0x00           ; al = '\0'
+                repne scasb            ; while (--cx && [rdi]!='\0') { rdi++ };
+                sub rdi, rsi           ; rdi = strlen(str)
+
+                mov rax, 1             ; write64
+                mov rdx, rdi           ; rdx = strlen
+                mov rdi, 1             ; stdout
+                syscall                ; write64(stdout, str, strlen(str));
+
+                add r10, sizParam      ; nextParam
+                pop rsi
+                inc rsi                ; nextSymbol
+                mov rax, 1
+                mov rdx, 1
+                jmp myPrintfNextSymbol
+                
+
     myPrintfPerPow2End:
                 pop rsi
                 inc rsi                ; nextSymbol
@@ -280,7 +305,9 @@ NumBufLen       equ NumBufLen - NumBuf
 
 section .rodata
 
-formatStr       db "%x %o hi %o %x %d %c %x", 0x0a, 0x00
+formatStr       db "%x %o hi %o %x %d %s %x", 0x0a, 0x00
+
+msg             db "hello", 0x00
 
 Digits          db '0123456789abcdef'
 PercentSymb     db '%'
@@ -293,8 +320,9 @@ myPrintfSpecPer dq myPrintfPerPer,  ('a'-'%'-1) dup(myPrintfDefault) ; %% - symb
 myPrintfSpecA   dq myPrintfDefault                                   ; start of digits
 myPrintfSpecB   dq myPrintfPerB                                      ; %b - bin
 myPrintfSpecC   dq myPrintfPerC                                      ; %c - char
-myPrintfSpecD   dq myPrintfPerD,    ('o'-'d'-1) dup(myPrintfDefault) ; %d
-myPrintfSpecO   dq myPrintfPerO,    ('x'-'o'-1) dup(myPrintfDefault) ; %o - oct
+myPrintfSpecD   dq myPrintfPerD,    ('o'-'d'-1) dup(myPrintfDefault) ; %d - decimal (int)
+myPrintfSpecO   dq myPrintfPerO,    ('s'-'o'-1) dup(myPrintfDefault) ; %o - oct
+myPrintfSpecS   dq myPrintfPerS,    ('x'-'s'-1) dup(myPrintfDefault) ; %s - str
 myPrintfSpecX   dq myPrintfPerX,    (256-'x'-1) dup(myPrintfDefault) ; %x - hex
 
 ;======================================================================================

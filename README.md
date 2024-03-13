@@ -14,3 +14,4 @@ To use it in C code there is a function `myPrintf` that pushes the 6 registers t
     * %b - binary
     * %c - char
     * %d - decimal
+    * %s - null-terminated str
