@@ -42,6 +42,7 @@
 *.idb
 *.pdb
 *.lst
+*.s
 
 # Kernel Module Compile Results
 *.mod*
@@ -54,3 +55,4 @@ dkms.conf
 
 # Executable
 my_printf
+test_my_printf

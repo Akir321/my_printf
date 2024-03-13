@@ -2,15 +2,39 @@ section .text
 
 global _start
 
+global myPrintf
+
+
+%ifdef COMMENT
+_start:
+                mov rdi, formatStr
+                mov rsi, 0x1234
+                mov rdx, 0x1234
+                mov rcx, 56
+                mov r8, 34
+                mov r9, -89
+
+                push 12
+                push 98
+
+                call myPrintf
+
+                mov rax, 0x3c    ; exit
+                xor rdi, rdi     ; exit code = 0
+                syscall
+%endif
+
+
+%ifdef COMMENT
 _start:         
                 push rbp
                 mov rbp, rsp
 
                 sub rsp, 40
                 mov qword [rbp-40], formatStr 
-                mov qword [rbp-32], 0x2222
+                mov qword [rbp-32], 1234
                 mov qword [rbp-24], 0x1111
-                mov qword [rbp-16], 0x1234
+                mov qword [rbp-16], 0x2222
                 mov byte  [rbp-8],  'x'
 
                 call _myPrintf   ; printf(formatStr);
@@ -21,10 +45,37 @@ _start:
                 mov rax, 0x3c    ; exit
                 xor rdi, rdi     ; exit code = 0
                 syscall
+%endif
 
 
 
-;================ _my_printf =====================
+;================= myPrintf =====================
+; A tramplin for _myPrintf to use it with stdcall
+
+;================================================
+;================= CONSTS =======================
+sizParam        equ 8
+;================================================
+
+myPrintf:
+                pop r12               ; r12 = return address
+
+                push r9
+                push r8
+                push rcx
+                push rdx
+                push rsi
+                push rdi
+
+                call _myPrintf        ; push params and call C decl func
+
+                add rsp, sizParam * 6 ; release the stack
+                push r12              ; push back ret addr
+                ret
+
+
+
+;================ _myPrintf =====================
 ; C decl function, works exactly like C printf,
 ; but with few limitations. 
 ; Parameters are passed through stack
@@ -118,21 +169,48 @@ _myPrintf:
                 mov rsi, r10           ; rsi = ptr to char to write
                 syscall                ; write(stdout, &symbol, 1)
 
-                add r10, 8             ; next param
+                add r10, sizParam      ; next param
                 pop rsi
                 inc rsi
                 jmp myPrintfNextSymbol
 
-
-
-
-
     myPrintfPerPow2End:
                 pop rsi
                 inc rsi                ; nextSymbol
-                add r10, 8             ; nextParam;
+                add r10, sizParam      ; nextParam;
                 mov rax, 1             ; write64()
                 mov rdx, 1             ; rdx = 1 (for writing one byte in syscall write)
+                jmp myPrintfNextSymbol
+
+    myPrintfPerD:
+                mov rax, [r10]             ; rdx:rax = num to write
+                mov r8, NumBufEnd          ; r8  = ptr to the right of NumBuf
+
+            printPerDNextDigit:            ; do {} while (num != 0);
+                xor rdx, rdx               ; rdx = 0
+                dec r8                     ; NumBuf--;
+
+                mov r9, 10                 ; r9 = 10 -> base
+                div r9                     ; rax = curNum / 10; rdx = curNum % 10                   
+                mov dl, Digits[rdx]        ; r9 = curDigit symbol
+                mov byte [r8], dl          ; write curDigit in mem (NumBuf)
+                cmp rax, 0
+                jne printPerDNextDigit     ; if (number == 0) break;
+
+            printPerDWrite:
+                mov rax, 0x01              ; write64()
+                mov rdi, 1                 ; fd  = stdout
+                push rsi
+                mov rsi, r8                ; buf = NumBuf (from last written digit)
+                mov rdx, NumBufEnd         
+                sub rdx, r8                ; rdx = amount of digits
+                syscall                    ; write64(stdout, NumBuf, len(num));
+
+                pop rsi
+                mov rdx, 1
+                mov rax, 1
+                inc rsi
+                add r10, sizParam
                 jmp myPrintfNextSymbol
 
 
@@ -150,7 +228,7 @@ _myPrintf:
 ;=====================================================================
 
 printNumBasePow2:
-                mov r8, NumBufEnd          ; r8 = ptr to the right of buf
+                mov r8, NumBufEnd          ; r8 = ptr to the right of NumBuf
                 mov cl, dl                 ; cl = amount of bits to shift
 
 
@@ -187,7 +265,7 @@ NumBufLen       equ NumBufLen - NumBuf
 
 section .rodata
 
-formatStr       db "%x %o %b %c = hello, world", 0x0a, 0x00
+formatStr       db "%x %o hi %o %x %d %c %x", 0x0a, 0x00
 
 Digits          db '0123456789abcdef'
 PercentSymb     db '%'
@@ -200,7 +278,7 @@ myPrintfSpecPer dq myPrintfPerPer,  ('a'-'%'-1) dup(myPrintfDefault) ; %% - symb
 myPrintfSpecA   dq myPrintfDefault                                   ; start of digits
 myPrintfSpecB   dq myPrintfPerB                                      ; %b - bin
 myPrintfSpecC   dq myPrintfPerC                                      ; %c - char
-myPrintfSpecD   dq myPrintfDefault, ('o'-'d'-1) dup(myPrintfDefault) ; %d
+myPrintfSpecD   dq myPrintfPerD,    ('o'-'d'-1) dup(myPrintfDefault) ; %d
 myPrintfSpecO   dq myPrintfPerO,    ('x'-'o'-1) dup(myPrintfDefault) ; %o - oct
 myPrintfSpecX   dq myPrintfPerX,    (256-'x'-1) dup(myPrintfDefault) ; %x - hex
 
