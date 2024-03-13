@@ -4,12 +4,13 @@ An implementation of printf on nasm x86-64
 # Features
 It currently works as a C decl function, so the parameters are passed through stack.
 
-No width or length specifiers are suported, ll is not supported, but is assumed (so all the numbers are 64 bit)
+No width or length specifiers are suported, ll is not supported
     
-Later will be created a function that supports stdcall to make it possible to call myPrintf outside C code.
+To use it in C code there is a function `myPrintf` that pushes the 6 registers to stack, providing a C decl call for `_myPrintf`
 
 # Supported specifiers
     * %x - hex
     * %o - oct
-    * %b - bin
+    * %b - binary
     * %c - char
+    * %d - decimal

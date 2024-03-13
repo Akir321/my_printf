@@ -19,6 +19,8 @@ _start:
 
                 call myPrintf
 
+                add rsp, 8 * 2   ; release the stack
+
                 mov rax, 0x3c    ; exit
                 xor rdi, rdi     ; exit code = 0
                 syscall
@@ -102,7 +104,7 @@ _myPrintf:
 
             myPrintfNextSymbol:
                 cmp byte [rsi], 0      
-                je myPrintfEnd         ; if (curSymbol == '\0) return
+                je myPrintfEnd         ; if (curSymbol == '\0') return
 
                 cmp byte [rsi], '%'
                 je myPrintfParamOut
@@ -141,25 +143,25 @@ _myPrintf:
                 jmp myPrintfNextSymbol
 
     myPrintfPerX:
-                mov rdi, [r10]         ; rdi = num to write
+                mov edi, [r10]         ; edi = num to write
                 push rsi
-                mov rsi, 0x0f          ; mask for last digit (0b1111)
+                mov esi, 0x0f          ; mask for last digit (0b1111)
                 mov rdx, 4             ; bits of 1 digit
                 call printNumBasePow2
                 jmp myPrintfPerPow2End ; same instr for all pow2-based specifiers
 
     myPrintfPerO:
-                mov rdi, [r10]         ; rdi = num to write
+                mov edi, [r10]         ; edi = num to write
                 push rsi
-                mov rsi, 0x07          ; mask for last digit (0b0111)
+                mov esi, 0x07          ; mask for last digit (0b0111)
                 mov rdx, 3             ; bits of 1 digit
                 call printNumBasePow2
                 jmp myPrintfPerPow2End ; same instr for all pow2-based specifiers
 
     myPrintfPerB:
-                mov rdi, [r10]         ; rdi = num to write
+                mov edi, [r10]         ; edi = num to write
                 push rsi
-                mov rsi, 0x01          ; mask for last digit (0b0001)
+                mov esi, 0x01          ; mask for last digit (0b0001)
                 mov rdx, 1             ; bits of 1 digit
                 call printNumBasePow2
                 jmp myPrintfPerPow2End ; same instr for all pow2-based specifiers
@@ -183,19 +185,31 @@ _myPrintf:
                 jmp myPrintfNextSymbol
 
     myPrintfPerD:
-                mov rax, [r10]             ; rdx:rax = num to write
                 mov r8, NumBufEnd          ; r8  = ptr to the right of NumBuf
+                mov eax, [r10]             ; edx:eax = num to write
+                cmp eax, 0
+                push 0                     ; local var for sign
+                jns printPerDNextDigit     ; if (num >= 0) evaluate digits
+                inc byte [rsp]            
+                neg eax                    ; if (num < 0) { numSign = 1; num = -num; }
+
 
             printPerDNextDigit:            ; do {} while (num != 0);
-                xor rdx, rdx               ; rdx = 0
+                xor edx, edx               ; edx = 0
                 dec r8                     ; NumBuf--;
 
                 mov r9, 10                 ; r9 = 10 -> base
-                div r9                     ; rax = curNum / 10; rdx = curNum % 10                   
-                mov dl, Digits[rdx]        ; r9 = curDigit symbol
+                div r9d                    ; rax = curNum / 10; rdx = curNum % 10                   
+                mov dl, Digits[edx]        ; dl = curDigit symbol
                 mov byte [r8], dl          ; write curDigit in mem (NumBuf)
-                cmp rax, 0
+                cmp eax, 0
                 jne printPerDNextDigit     ; if (number == 0) break;
+
+                cmp dword [rsp], 0
+                je printPerDWrite          ; if (sign == 0) write num
+                dec r8
+                mov byte [r8], '-'         ; if (sign == 1) write '-' symbol
+
 
             printPerDWrite:
                 mov rax, 0x01              ; write64()
@@ -207,6 +221,7 @@ _myPrintf:
                 syscall                    ; write64(stdout, NumBuf, len(num));
 
                 pop rsi
+                add rsp, 8                 ; release the sign var
                 mov rdx, 1
                 mov rax, 1
                 inc rsi
@@ -218,8 +233,8 @@ _myPrintf:
 ;======================= printNumBasePow2 ===========================
 ; Prints a number in a pow2-system (bin, oct, hex)
 ; 
-; Param:  rdi = number to print
-;         rsi = bit mask to get the lowest digit (depends on base)
+; Param:  edi = number to print
+;         esi = bit mask to get the lowest digit (depends on base)
 ;         rdx = amount of bits to shift (amount of 1 bits in rsi)
 ;
 ; Exit:   None
@@ -234,12 +249,12 @@ printNumBasePow2:
 
             printNBP2NextDigit:            ; do {} while (num != 0);
                 dec r8                     ; NumBuf--;
-                mov r9, rdi                ; r9 = curNum
-                and r9, rsi                ; r9 = curDigit value
-                mov r9, Digits[r9]         ; r9 = curDigit symbol
-                mov byte [r8], r9b         ; write curDigit in mem (NumBuf)
+                mov eax, edi               ; eax = curNum
+                and eax, esi               ; eax = curDigit value
+                mov eax, Digits[eax]       ; eax = curDigit symbol
+                mov byte [r8], al          ; write curDigit in mem (NumBuf)
 
-                shr rdi, cl                ; rdi /= base
+                shr edi, cl                ; edi /= base
                 jne printNBP2NextDigit     ; if (number == 0) break;
 
 
