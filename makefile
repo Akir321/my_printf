@@ -10,7 +10,7 @@ CXX_FLAGS = -Wshadow -Winit-self -Wredundant-decls -Wcast-align -Wundef -Wfloat-
 
 
 
-all: test_my_printf
+all: my_printf
 
 complink: test_printf.cpp my_printf.o
 	$(CXX) $< my_printf.o -o $@ $(CXX_FLAGS)

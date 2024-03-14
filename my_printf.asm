@@ -4,15 +4,30 @@ global _start
 
 global myPrintf
 
+;==================================== MACRO ==============================
 
-%ifdef COMMENT
+
+; assuming that: al  = (symb) --        symbol to write
+;                rdi = (dest) -- ptr to where  to write
+%macro writeToBuf 0
+                cmp rdi, outBufEnd
+                jne %%skip
+                call flushBuffer         ; if (rdi == outBufEnd) flushBuf();
+
+%%skip:         stosb
+
+%endmacro
+
+;=========================================================================
+
+;%ifdef COMMENT
 _start:
                 mov rdi, formatStr
                 mov rsi, 0x1234
                 mov rdx, 0x1234
                 mov rcx, 56
                 mov r8, 34
-                mov r9, -89
+                mov r9, 'x'
 
                 push 12
                 push msg
@@ -24,7 +39,7 @@ _start:
                 mov rax, 0x3c    ; exit
                 xor rdi, rdi     ; exit code = 0
                 syscall
-%endif
+;%endif
 
 
 %ifdef COMMENT
@@ -85,6 +100,9 @@ myPrintf:
 ; Supported specifiers: %x - hex
 ;                       %o - oct
 ;                       %b - bin
+;                       %d - dec
+;                       %c - char
+;                       %s - str
 ;
 ;=================================================
 
@@ -93,39 +111,37 @@ _myPrintf:
                 push rbp
                 mov rbp, rsp
 
-                mov rax, 0x01          ; write64
-                mov rdi, 1             ; fd = stdout
+                mov rdi, outBuf        ; ptr to buffer in mem
                 mov rsi, [rbp+16]      ; formatStr
-                mov rdx, 1             ; 1 character at a time
-
                 mov r10, rbp
                 add r10, 24            ; r10 = ptr to params in stack
 
 
             myPrintfNextSymbol:
-                cmp byte [rsi], 0      
-                je myPrintfEnd         ; if (curSymbol == '\0') return
+                lodsb                  ; al = [rsi++] -> al = curSymbol
 
-                cmp byte [rsi], '%'
-                je myPrintfParamOut
+                cmp al, 0      
+                je myPrintfEnd         ; if (curSymbol == '\0') return;
 
-                syscall                ; write64(stdout, &curSymbol, 1)
-                inc rsi                ; rsi++; next symbol
+                cmp al, '%'
+                je myPrintfParamOut    ; if (curSymbol == '%')  writeParam;
+
+                writeToBuf             ; write symbol (al), flush if needed
                 jmp myPrintfNextSymbol
 
 
             myPrintfEnd:
+                call flushBuffer       ; flush outBuf before exit
                 pop rbp
                 ret
 
 
         myPrintfParamOut:
-                inc rsi                ; rsi++; next symbol
-                mov r9, [rsi]
-                and r9, 0xff           ; r9 = one symbol
-                shl r9, 3              ; r9 *= 8
-                jmp myPrintfSpec[r9] 
-
+                lodsb                  ; al  = [rsi++] -> al = curSymbol
+                                       ; al  = symbol after '%'
+                and rax, 0xff          ; rax = one symbol
+                shl rax, 3             ; rax *= addrSize
+                jmp myPrintfSpec[rax]  ; switch(curSymbol)
 
 
 
@@ -134,46 +150,38 @@ _myPrintf:
                 jmp myPrintfPerPer     ; write % as a symbol
 
     myPrintfPerPer:
-                push rsi
-                mov rsi, PercentSymb
-                syscall                ; write64(stdout, &"%", 1); => putc(stdout, '%);
-                pop rsi
-
-                inc rsi
+                mov al, '%'            ; al = '%' <- symbol to write
+                writeToBuf             ; write symbol (al), flush if needed
                 jmp myPrintfNextSymbol
 
     myPrintfPerX:
-                mov edi, [r10]         ; edi = num to write
                 push rsi
-                mov esi, 0x0f          ; mask for last digit (0b1111)
-                mov rdx, 4             ; bits of 1 digit
+                mov esi, [r10]         ; esi = num to write
+                mov rdx, 0x0f          ; mask for last digit (0b1111)
+                mov cl, 4              ; bits of 1 digit
                 call printNumBasePow2
                 jmp myPrintfPerPow2End ; same instr for all pow2-based specifiers
 
     myPrintfPerO:
-                mov edi, [r10]         ; edi = num to write
                 push rsi
-                mov esi, 0x07          ; mask for last digit (0b0111)
-                mov rdx, 3             ; bits of 1 digit
+                mov esi, [r10]         ; esi = num to write
+                mov edx, 0x07          ; mask for last digit (0b0111)
+                mov cl, 3             ; bits of 1 digit
                 call printNumBasePow2
                 jmp myPrintfPerPow2End ; same instr for all pow2-based specifiers
 
     myPrintfPerB:
-                mov edi, [r10]         ; edi = num to write
                 push rsi
-                mov esi, 0x01          ; mask for last digit (0b0001)
-                mov rdx, 1             ; bits of 1 digit
+                mov esi, [r10]         ; edi = num to write
+                mov edx, 0x01          ; mask for last digit (0b0001)
+                mov cl, 1              ; bits of 1 digit
                 call printNumBasePow2
                 jmp myPrintfPerPow2End ; same instr for all pow2-based specifiers
 
     myPrintfPerC:
-                push rsi
-                mov rsi, r10           ; rsi = ptr to char to write
-                syscall                ; write(stdout, &symbol, 1)
-
+                mov al, [r10]          ; al = symbol to write
                 add r10, sizParam      ; next param
-                pop rsi
-                inc rsi
+                writeToBuf             ; write symbol (al), flush if needed
                 jmp myPrintfNextSymbol
 
     myPrintfPerS:
@@ -203,10 +211,7 @@ _myPrintf:
 
     myPrintfPerPow2End:
                 pop rsi
-                inc rsi                ; nextSymbol
                 add r10, sizParam      ; nextParam;
-                mov rax, 1             ; write64()
-                mov rdx, 1             ; rdx = 1 (for writing one byte in syscall write)
                 jmp myPrintfNextSymbol
 
     myPrintfPerD:
@@ -258,9 +263,10 @@ _myPrintf:
 ;======================= printNumBasePow2 ===========================
 ; Prints a number in a pow2-system (bin, oct, hex)
 ; 
-; Param:  edi = number to print
-;         esi = bit mask to get the lowest digit (depends on base)
-;         rdx = amount of bits to shift (amount of 1 bits in rsi)
+; Param:  rdi = dest (void *)
+;         esi = number to print
+;         edx = bit mask to get the lowest digit (depends on base)
+;          cl = amount of bits to shift (amount of 1 bits in rsi)
 ;
 ; Exit:   None
 ;
@@ -269,43 +275,84 @@ _myPrintf:
 
 printNumBasePow2:
                 mov r8, NumBufEnd          ; r8 = ptr to the right of NumBuf
-                mov cl, dl                 ; cl = amount of bits to shift
-
 
             printNBP2NextDigit:            ; do {} while (num != 0);
                 dec r8                     ; NumBuf--;
-                mov eax, edi               ; eax = curNum
-                and eax, esi               ; eax = curDigit value
+                mov eax, esi               ; eax = curNum
+                and eax, edx               ; eax = curDigit value
                 mov eax, Digits[eax]       ; eax = curDigit symbol
                 mov byte [r8], al          ; write curDigit in mem (NumBuf)
 
-                shr edi, cl                ; edi /= base
+                shr esi, cl                ; esi /= base
                 jne printNBP2NextDigit     ; if (number == 0) break;
 
 
-            printNBP2Write:
-                mov rax, 0x01              ; write64()
-                mov rdi, 1                 ; fd  = stdout
+            ; write num to outBuf
                 mov rsi, r8                ; buf = NumBuf (from last written digit)
-                mov rdx, NumBufEnd         
-                sub rdx, r8                ; rdx = amount of digits
-                syscall                    ; write64(stdout, NumBuf, len(num));
+                xor cx, cx
+                dec cx                     ; cx = 0xffff
+            printNBP2WriteNextSymb:
+
+                lodsb                      ; al = [rsi++] -> al = curSymbol
+                writeToBuf                 ; write symbol (al), flush if needed
+                cmp rsi, NumBufEnd         ; do {} while (rsi != NumBufEnd)
+                loopne printNBP2WriteNextSymb
 
                 ret
+
+
+;========================= flushBuffer ===========================
+; A funtion that writes my output buffer to stdout and sets
+; register values according to the logic of program
+;
+; Enter: rdi = ptr to end of buf
+;                     beg of buf is outBuf
+;
+; Exit:  rdi = outBuf
+;
+; Destr: rax, rdi, rdx
+;=================================================================
+
+
+flushBuffer:
+                push rdi
+                push rsi
+
+                mov rax, 1        ; write64
+                mov rsi, outBuf   ; rsi = ptr to str
+                mov rdx, rdi
+                sub rdx, rsi      ; rdx = count
+                mov rdi, 1        ; fd = stdout
+                syscall           ; write64(stdout, outBuf, count)
+
+                pop rsi
+                pop rdi
+                mov rdi, outBuf   ; write from the start of outbuf
+
+                ret 
+
+
+
 
 
 
 section .data
 
-NumBuf          db 0 dup (64)
+bufSize         equ 64
+maxNDigits      equ 64
+
+NumBuf          db maxNDigits dup(0)
 NumBufEnd       db 0
 NumBufLen       equ NumBufLen - NumBuf
+
+outBuf          db bufSize dup(0)
+outBufEnd:      db 0
                 
 
 
 section .rodata
 
-formatStr       db "%x %o hi %o %x %d %s %x", 0x0a, 0x00
+formatStr       db "%x %o hi %o %x %% %r %c", 0x0a, 0x00
 
 msg             db "hello", 0x00
 
