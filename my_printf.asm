@@ -27,7 +27,7 @@ _start:
                 mov rdx, 0x1234
                 mov rcx, 56
                 mov r8, 34
-                mov r9, 'x'
+                mov r9, -89
 
                 push 12
                 push msg
@@ -110,7 +110,8 @@ myPrintf:
 _myPrintf:      
                 push rbp
                 mov rbp, rsp
-
+                
+                cld                    ; df = 0 -> move forwards
                 mov rdi, outBuf        ; ptr to buffer in mem
                 mov rsi, [rbp+16]      ; formatStr
                 mov r10, rbp
@@ -181,31 +182,23 @@ _myPrintf:
     myPrintfPerC:
                 mov al, [r10]          ; al = symbol to write
                 add r10, sizParam      ; next param
-                writeToBuf             ; write symbol (al), flush if needed
+                writeToBuf             ; flush outBuf if needed, write symbol (al)
                 jmp myPrintfNextSymbol
 
     myPrintfPerS:
                 push rsi
                 mov rsi, [r10]         ; rsi = str to print
 
-                cld                    ; df = 0; move forward
-                mov rdi, rsi           ; rdi = begin of str
-                xor cx, cx
-                dec cx                 ; cx = 0xffff
-                mov al, 0x00           ; al = '\0'
-                repne scasb            ; while (--cx && [rdi]!='\0') { rdi++ };
-                sub rdi, rsi           ; rdi = strlen(str)
-
-                mov rax, 1             ; write64
-                mov rdx, rdi           ; rdx = strlen
-                mov rdi, 1             ; stdout
-                syscall                ; write64(stdout, str, strlen(str));
-
+            printStrNextSymbol:
+                lodsb                  ; al = [rsi++] <- curSymbol
+                cmp al, 0x00           ; if (curSymbol == '\0') break;
+                je myPrintfPerSEnd
+                writeToBuf             ; flush outBuf if needed, write symbol (al)
+                jmp printStrNextSymbol
+                
+            myPrintfPerSEnd:
                 add r10, sizParam      ; nextParam
                 pop rsi
-                inc rsi                ; nextSymbol
-                mov rax, 1
-                mov rdx, 1
                 jmp myPrintfNextSymbol
                 
 
@@ -236,25 +229,25 @@ _myPrintf:
                 jne printPerDNextDigit     ; if (number == 0) break;
 
                 cmp dword [rsp], 0
-                je printPerDWrite          ; if (sign == 0) write num
+                je printPerDWriteNext      ; if (sign == 0) write num
                 dec r8
                 mov byte [r8], '-'         ; if (sign == 1) write '-' symbol
 
 
-            printPerDWrite:
-                mov rax, 0x01              ; write64()
-                mov rdi, 1                 ; fd  = stdout
                 push rsi
-                mov rsi, r8                ; buf = NumBuf (from last written digit)
-                mov rdx, NumBufEnd         
-                sub rdx, r8                ; rdx = amount of digits
-                syscall                    ; write64(stdout, NumBuf, len(num));
+                mov rsi, r8                ; rsi = numBuf
+            printPerDWriteNext:
+                cmp rsi, NumBufEnd         ; if (&curSymb == NumBufEnd) break
+                je printPerDEnd
 
+                lodsb                      ; al = [rsi++] <- symbol to write
+                writeToBuf                 ; flush outBuf if needed, write symbol (al)
+                jmp printPerDWriteNext
+
+                
+            printPerDEnd:
                 pop rsi
                 add rsp, 8                 ; release the sign var
-                mov rdx, 1
-                mov rax, 1
-                inc rsi
                 add r10, sizParam
                 jmp myPrintfNextSymbol
 
@@ -294,7 +287,7 @@ printNumBasePow2:
             printNBP2WriteNextSymb:
 
                 lodsb                      ; al = [rsi++] -> al = curSymbol
-                writeToBuf                 ; write symbol (al), flush if needed
+                writeToBuf                 ; flush outBuf if needed, write symbol (al)
                 cmp rsi, NumBufEnd         ; do {} while (rsi != NumBufEnd)
                 loopne printNBP2WriteNextSymb
 
@@ -352,7 +345,7 @@ outBufEnd:      db 0
 
 section .rodata
 
-formatStr       db "%x %o hi %o %x %% %r %c", 0x0a, 0x00
+formatStr       db "%x %o hi %o %x %% %r %d %s", 0x0a, 0x00
 
 msg             db "hello", 0x00
 
