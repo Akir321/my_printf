@@ -20,7 +20,7 @@ global myPrintf
 
 ;=========================================================================
 
-;%ifdef COMMENT
+%ifdef COMMENT
 _start:
                 mov rdi, formatStr
                 mov rsi, 0x1234
@@ -39,7 +39,7 @@ _start:
                 mov rax, 0x3c    ; exit
                 xor rdi, rdi     ; exit code = 0
                 syscall
-;%endif
+%endif
 
 
 %ifdef COMMENT
@@ -141,6 +141,12 @@ _myPrintf:
                 lodsb                  ; al  = [rsi++] -> al = curSymbol
                                        ; al  = symbol after '%'
                 and rax, 0xff          ; rax = one symbol
+                cmp al, '%'            
+                jl myPrintfDefault     ; if (curSymb < '%') default
+                cmp al, 'x'            
+                ja myPrintfDefault     ; if (curSymb > 'x') default
+
+                sub rax, '%'           ; rax -= '%'
                 shl rax, 3             ; rax *= addrSize
                 jmp myPrintfSpec[rax]  ; switch(curSymbol)
 
@@ -355,14 +361,13 @@ PercentSymb     db '%'
 
 ;=========================== printf specifiers jmp table =============================
 
-myPrintfSpec    dq '%' dup(myPrintfDefault)                          ; start
-myPrintfSpecPer dq myPrintfPerPer,  ('a'-'%'-1) dup(myPrintfDefault) ; %% - symbol '%'
-myPrintfSpecA   dq myPrintfDefault                                   ; start of digits
+; start
+myPrintfSpec    dq myPrintfPerPer,  ('b'-'%'-1) dup(myPrintfDefault) ; %% - symbol '%'
 myPrintfSpecB   dq myPrintfPerB                                      ; %b - bin
 myPrintfSpecC   dq myPrintfPerC                                      ; %c - char
 myPrintfSpecD   dq myPrintfPerD,    ('o'-'d'-1) dup(myPrintfDefault) ; %d - decimal (int)
 myPrintfSpecO   dq myPrintfPerO,    ('s'-'o'-1) dup(myPrintfDefault) ; %o - oct
 myPrintfSpecS   dq myPrintfPerS,    ('x'-'s'-1) dup(myPrintfDefault) ; %s - str
-myPrintfSpecX   dq myPrintfPerX,    (256-'x'-1) dup(myPrintfDefault) ; %x - hex
+myPrintfSpecX   dq myPrintfPerX,                                     ; %x - hex
 
 ;======================================================================================
