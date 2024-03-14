@@ -29,7 +29,13 @@ _start:
                 mov r8, 34
                 mov r9, -89
 
-                push 12
+
+                push 30
+                push 33
+                push 100
+                push 3802
+                push love
+                push -1
                 push msg
 
                 call myPrintf
@@ -235,13 +241,14 @@ _myPrintf:
                 jne printPerDNextDigit     ; if (number == 0) break;
 
                 cmp dword [rsp], 0
-                je printPerDWriteNext      ; if (sign == 0) write num
+                je printPerDWrite          ; if (sign == 0) write num
                 dec r8
                 mov byte [r8], '-'         ; if (sign == 1) write '-' symbol
 
-
+            printPerDWrite:
                 push rsi
                 mov rsi, r8                ; rsi = numBuf
+
             printPerDWriteNext:
                 cmp rsi, NumBufEnd         ; if (&curSymb == NumBufEnd) break
                 je printPerDEnd
@@ -290,8 +297,8 @@ printNumBasePow2:
                 mov rsi, r8                ; buf = NumBuf (from last written digit)
                 xor cx, cx
                 dec cx                     ; cx = 0xffff
-            printNBP2WriteNextSymb:
 
+            printNBP2WriteNextSymb:
                 lodsb                      ; al = [rsi++] -> al = curSymbol
                 writeToBuf                 ; flush outBuf if needed, write symbol (al)
                 cmp rsi, NumBufEnd         ; do {} while (rsi != NumBufEnd)
@@ -351,9 +358,10 @@ outBufEnd:      db 0
 
 section .rodata
 
-formatStr       db "%x %o hi %o %x %% %r %d %s", 0x0a, 0x00
+formatStr       db "%x %o hi %o %x %% %r %d %s", 0x0a, "%d %s %x %d%%%c%b", 0x0a, 0x00
 
 msg             db "hello", 0x00
+love            db "love",  0x00
 
 Digits          db '0123456789abcdef'
 PercentSymb     db '%'
@@ -362,6 +370,7 @@ PercentSymb     db '%'
 ;=========================== printf specifiers jmp table =============================
 
 ; start
+align 8
 myPrintfSpec    dq myPrintfPerPer,  ('b'-'%'-1) dup(myPrintfDefault) ; %% - symbol '%'
 myPrintfSpecB   dq myPrintfPerB                                      ; %b - bin
 myPrintfSpecC   dq myPrintfPerC                                      ; %c - char

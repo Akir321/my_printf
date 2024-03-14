@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-extern "C" void myPrintf(...);
+extern "C" void myPrintf(const char *format, ...) __attribute__ ((format(printf, 1, 2)));
 
 int main()
 {
@@ -9,8 +9,9 @@ int main()
     const char *msg = "man";
 
     puts("C printf:");
-    printf("%x %o hi %o %x %d %s %x\n", 0x1234, 0x1234, 56, 34, -89, msg, 12);
+    printf("%x %o hi %d %s %c %d\n", 0x1234, 0x1234, -89, msg, 'x', 0x14);
 
     puts("myPrintf:");
-    myPrintf("%x %o hi %o %x %d %s %x\n", 0x1234, 0x1234, 56, 34, -89, msg, 12);
+    myPrintf("%x %o hi %d %s %c %d\n%d %s %x %d%%%c%b\n",
+              0x1234, 0x1234, -89, msg, 'x', 0x14, -1, "love", 3802, 100, 33, 30);
 }
