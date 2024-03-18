@@ -172,24 +172,21 @@ _myPrintf:
                 mov esi, [r10]         ; esi = num to write
                 mov rdx, 0x0f          ; mask for last digit (0b1111)
                 mov cl, 4              ; bits of 1 digit
-                call printNumBasePow2
-                jmp myPrintfPerPow2End ; same instr for all pow2-based specifiers
+                jmp printNumBasePow2
 
     myPrintfPerO:
                 push rsi
                 mov esi, [r10]         ; esi = num to write
                 mov edx, 0x07          ; mask for last digit (0b0111)
-                mov cl, 3             ; bits of 1 digit
-                call printNumBasePow2
-                jmp myPrintfPerPow2End ; same instr for all pow2-based specifiers
+                mov cl, 3              ; bits of 1 digit
+                jmp printNumBasePow2
 
     myPrintfPerB:
                 push rsi
                 mov esi, [r10]         ; edi = num to write
                 mov edx, 0x01          ; mask for last digit (0b0001)
                 mov cl, 1              ; bits of 1 digit
-                call printNumBasePow2
-                jmp myPrintfPerPow2End ; same instr for all pow2-based specifiers
+                jmp printNumBasePow2
 
     myPrintfPerC:
                 mov al, [r10]          ; al = symbol to write
@@ -268,6 +265,9 @@ _myPrintf:
 
 ;======================= printNumBasePow2 ===========================
 ; Prints a number in a pow2-system (bin, oct, hex)
+;
+; WARNING: It is not a function, as it ends with a jump
+;          This is to make it more pipeline-friendly
 ; 
 ; Param:  rdi = dest (void *)
 ;         esi = number to print
@@ -304,7 +304,7 @@ printNumBasePow2:
                 cmp rsi, NumBufEnd         ; do {} while (rsi != NumBufEnd)
                 loopne printNBP2WriteNextSymb
 
-                ret
+                jmp myPrintfPerPow2End     ; same instr for all pow2-based specifiers
 
 
 ;========================= flushBuffer ===========================
